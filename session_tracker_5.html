@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>REEF SESSION LOG // PIXEL USAGE MONITOR</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&family=Rajdhani:wght@300;400;600&display=swap');
+
+  :root {
+    --bg: #0a0c0f;
+    --bg2: #0e1117;
+    --bg3: #131820;
+    --panel: #111620;
+    --border: #1e2d3d;
+    --border-glow: #2a4a6b;
+    --cyan: #4dd9e8;
+    --cyan-dim: #1a6b7a;
+    --teal: #2eb8c8;
+    --orange: #e8824d;
+    --orange-dim: #7a3d1a;
+    --amber: #f0b429;
+    --amber-dim: #7a5a0a;
+    --green: #4de8a0;
+    --green-dim: #1a7a4d;
+    --red: #e84d6b;
+    --red-dim: #7a1a2e;
+    --text: #c8d8e8;
+    --text-dim: #4a6a8a;
+    --text-muted: #2a4a6a;
+    --scanline: rgba(0,0,0,0.15);
+    --crt-glow: rgba(77, 217, 232, 0.04);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* CRT scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      var(--scanline) 0px,
+      var(--scanline) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.4;
+  }
+
+  /* Vignette */
+  body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%);
+    pointer-events: none;
+    z-index: 998;
+  }
+
+  /* Grid bg */
+  .grid-bg {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image:
+      linear-gradient(rgba(77,217,232,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(77,217,232,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 60%;
+    height: 1px;
+    background: linear-gradient(90deg, var(--cyan), transparent);
+  }
+
+  .header-left h1 {
+    font-family: 'VT323', monospace;
+    font-size: 2.8rem;
+    color: var(--cyan);
+    text-shadow: 0 0 20px rgba(77,217,232,0.5), 0 0 40px rgba(77,217,232,0.2);
+    letter-spacing: 0.05em;
+    line-height: 1;
+  }
+
+  .header-left .subtitle {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-top: 0.3rem;
+  }
+
+  .header-right {
+    text-align: right;
+  }
+
+  .live-clock {
+    font-family: 'VT323', monospace;
+    font-size: 2rem;
+    color: var(--amber);
+    text-shadow: 0 0 15px rgba(240,180,41,0.4);
+  }
+
+  .live-date {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 1rem 1.2rem;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+  }
+
+  .stat-card.cyan::before { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+  .stat-card.orange::before { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
+  .stat-card.amber::before { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .stat-card.green::before { background: var(--green); box-shadow: 0 0 8px var(--green); }
+
+  .stat-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+
+  .stat-value {
+    font-family: 'VT323', monospace;
+    font-size: 2rem;
+    line-height: 1;
+  }
+
+  .stat-card.cyan .stat-value { color: var(--cyan); text-shadow: 0 0 10px rgba(77,217,232,0.4); }
+  .stat-card.orange .stat-value { color: var(--orange); text-shadow: 0 0 10px rgba(232,130,77,0.4); }
+  .stat-card.amber .stat-value { color: var(--amber); text-shadow: 0 0 10px rgba(240,180,41,0.4); }
+  .stat-card.green .stat-value { color: var(--green); text-shadow: 0 0 10px rgba(77,232,160,0.4); }
+
+  .stat-sub {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+  }
+
+  /* Main grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan-dim), transparent);
+  }
+
+  .panel-header {
+    padding: 0.8rem 1.2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    background: rgba(77,217,232,0.03);
+  }
+
+  .panel-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 6px var(--cyan);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .panel-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.75rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: var(--cyan);
+  }
+
+  .panel-body {
+    padding: 1.2rem;
+  }
+
+  /* Form elements */
+  .field-group {
+    margin-bottom: 1rem;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+    margin-bottom: 1rem;
+  }
+
+  label {
+    display: block;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+
+  input[type="text"],
+  input[type="datetime-local"],
+  input[type="number"],
+  select,
+  textarea {
+    width: 100%;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85rem;
+    padding: 0.5rem 0.7rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    appearance: none;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--cyan-dim);
+    box-shadow: 0 0 0 1px var(--cyan-dim), inset 0 0 8px rgba(77,217,232,0.05);
+  }
+
+  select option { background: var(--bg2); }
+
+  textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+
+  /* Tool checkboxes */
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .tool-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    background: var(--bg2);
+    transition: all 0.15s;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+
+  .tool-check:hover {
+    border-color: var(--border-glow);
+    color: var(--text);
+  }
+
+  .tool-check input[type="checkbox"] {
+    width: auto;
+    accent-color: var(--cyan);
+    cursor: pointer;
+  }
+
+  .tool-check.checked {
+    border-color: var(--cyan-dim);
+    background: rgba(77,217,232,0.05);
+    color: var(--cyan);
+  }
+
+  /* Estimate panel */
+  .estimate-panel {
+    background: var(--bg3);
+    border: 1px solid var(--border-glow);
+    padding: 1rem 1.2rem;
+    margin-top: 1rem;
+    position: relative;
+  }
+
+  .estimate-panel::before {
+    content: '// LIVE ESTIMATE';
+    position: absolute;
+    top: -0.55rem;
+    left: 1rem;
+    background: var(--bg3);
+    padding: 0 0.4rem;
+    font-size: 0.6rem;
+    color: var(--cyan-dim);
+    letter-spacing: 0.2em;
+  }
+
+  .estimate-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.6rem;
+  }
+
+  .est-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .est-label {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+
+  .est-value {
+    font-family: 'VT323', monospace;
+    font-size: 1.4rem;
+    color: var(--teal);
+    text-shadow: 0 0 8px rgba(46,184,200,0.4);
+  }
+
+  .est-value.warn { color: var(--amber); text-shadow: 0 0 8px rgba(240,180,41,0.4); }
+  .est-value.danger { color: var(--red); text-shadow: 0 0 8px rgba(232,77,107,0.4); }
+
+  /* Pressure meter */
+  .pressure-bar-wrap {
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .pressure-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+
+  .pressure-bar {
+    height: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .pressure-fill {
+    height: 100%;
+    transition: width 0.4s ease, background 0.4s;
+    position: relative;
+  }
+
+  .pressure-fill::after {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 4px; height: 100%;
+    background: rgba(255,255,255,0.4);
+  }
+
+  /* Buttons */
+  .btn-row {
+    display: flex;
+    gap: 0.8rem;
+    margin-top: 1rem;
+  }
+
+  .btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 0.6rem 1.2rem;
+    border: 1px solid;
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.15s;
+    flex: 1;
+  }
+
+  .btn-primary {
+    border-color: var(--cyan);
+    color: var(--cyan);
+  }
+
+  .btn-primary:hover {
+    background: var(--cyan);
+    color: var(--bg);
+    box-shadow: 0 0 15px rgba(77,217,232,0.3);
+  }
+
+  .btn-secondary {
+    border-color: var(--border);
+    color: var(--text-dim);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--text-dim);
+    color: var(--text);
+  }
+
+  .btn-danger {
+    border-color: var(--red-dim);
+    color: var(--red-dim);
+  }
+
+  .btn-danger:hover {
+    border-color: var(--red);
+    color: var(--red);
+    box-shadow: 0 0 10px rgba(232,77,107,0.2);
+  }
+
+  /* Log table */
+  .log-wrap {
+    margin-top: 1.5rem;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .log-header-row {
+    padding: 0.8rem 1.2rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(77,217,232,0.03);
+  }
+
+  .log-header-row .panel-title { margin: 0; }
+
+  .log-table-wrap {
+    overflow-x: auto;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+
+  .log-table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+  .log-table-wrap::-webkit-scrollbar-track { background: var(--bg2); }
+  .log-table-wrap::-webkit-scrollbar-thumb { background: var(--border-glow); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+  }
+
+  thead th {
+    padding: 0.6rem 0.8rem;
+    text-align: left;
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    position: sticky;
+    top: 0;
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  tbody tr:hover { background: rgba(77,217,232,0.03); }
+
+  tbody td {
+    padding: 0.55rem 0.8rem;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .td-date { color: var(--text-dim); }
+  .td-duration { color: var(--cyan); font-family: 'VT323', monospace; font-size: 1rem; }
+  .td-tokens { color: var(--amber); font-family: 'VT323', monospace; font-size: 1rem; }
+  .td-files { color: var(--orange); }
+  .td-words { color: var(--teal); font-family: 'VT323', monospace; font-size: 1rem; }
+  .td-tools { color: var(--text-dim); font-size: 0.68rem; }
+  .td-pressure { }
+  .td-del { 
+    color: var(--text-muted);
+    cursor: pointer;
+    text-align: center;
+    transition: color 0.15s;
+  }
+  .td-del:hover { color: var(--red); }
+
+  .mini-bar {
+    display: inline-block;
+    height: 4px;
+    min-width: 30px;
+    max-width: 80px;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+  }
+
+  .pressure-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid;
+  }
+
+  .badge-low { border-color: var(--green-dim); color: var(--green); }
+  .badge-med { border-color: var(--amber-dim); color: var(--amber); }
+  .badge-high { border-color: var(--orange-dim); color: var(--orange); }
+  .badge-crit { border-color: var(--red-dim); color: var(--red); }
+
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    letter-spacing: 0.15em;
+  }
+
+  .empty-state span {
+    display: block;
+    font-family: 'VT323', monospace;
+    font-size: 1.8rem;
+    color: var(--border-glow);
+    margin-bottom: 0.5rem;
+  }
+
+  /* Export */
+  .export-bar {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.8rem 1.2rem;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+
+  .export-bar span { flex: 1; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--panel);
+    border: 1px solid var(--cyan-dim);
+    padding: 0.7rem 1.2rem;
+    font-size: 0.75rem;
+    color: var(--cyan);
+    letter-spacing: 0.1em;
+    z-index: 1000;
+    transform: translateY(1rem);
+    opacity: 0;
+    transition: all 0.2s;
+    box-shadow: 0 0 20px rgba(77,217,232,0.15);
+  }
+
+  .toast.show { transform: translateY(0); opacity: 1; }
+
+  /* Glitch animation for header */
+  @keyframes glitch {
+    0%, 95%, 100% { text-shadow: 0 0 20px rgba(77,217,232,0.5), 0 0 40px rgba(77,217,232,0.2); transform: translate(0); }
+    96% { text-shadow: -2px 0 rgba(232,77,107,0.8), 2px 0 rgba(77,217,232,0.8); transform: translate(1px, 0); }
+    97% { text-shadow: 2px 0 rgba(232,77,107,0.8), -2px 0 rgba(77,217,232,0.8); transform: translate(-1px, 0); }
+    98% { text-shadow: 0 0 20px rgba(77,217,232,0.5); transform: translate(0); }
+  }
+
+  .header-left h1 {
+    animation: glitch 8s infinite;
+  }
+
+  /* Section separator */
+  .sep {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 1.5rem 0;
+  }
+
+  /* Notes field tip */
+  .field-tip {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+    letter-spacing: 0.1em;
+  }
+
+  /* Word count helper */
+  .wc-helper {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+  }
+
+  /* Responsive touch */
+  @media (max-width: 768px) {
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .main-grid { grid-template-columns: 1fr; }
+    .estimate-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>REEF SESSION LOG</h1>
+      <div class="subtitle">Pixel Usage Monitor &nbsp;|&nbsp; v1.0 &nbsp;|&nbsp; Built by Rattles &amp; Pixel</div>
+    </div>
+    <div class="header-right">
+      <div class="live-clock" id="liveClock">--:--:--</div>
+      <div class="live-date" id="liveDate">---</div>
+    </div>
+  </div>
+
+  <!-- Summary stats -->
+  <div class="stats-row">
+    <div class="stat-card cyan">
+      <div class="stat-label">Total Sessions</div>
+      <div class="stat-value" id="statSessions">0</div>
+      <div class="stat-sub">logged to reef</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-label">Total Hours</div>
+      <div class="stat-value" id="statHours">0.0</div>
+      <div class="stat-sub">across all sessions</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-label">Est. Tokens Used</div>
+      <div class="stat-value" id="statTokens">0</div>
+      <div class="stat-sub">lifetime rough estimate</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label">Avg Pressure</div>
+      <div class="stat-value" id="statPressure">—</div>
+      <div class="stat-sub">session intensity avg</div>
+    </div>
+  </div>
+
+  <!-- Form + Estimate -->
+  <div class="main-grid">
+
+    <!-- LOG FORM -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-dot"></div>
+        <div class="panel-title">New Session Entry</div>
+      </div>
+      <div class="panel-body">
+
+        <div class="field-group">
+          <label>Session Label / Focus</label>
+          <input type="text" id="fLabel" placeholder="e.g. Gacha Bot Build — ChromaDB setup" />
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label>Start Time</label>
+            <input type="datetime-local" id="fStart" />
+          </div>
+          <div>
+            <label>End Time</label>
+            <input type="datetime-local" id="fEnd" />
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="field-row">
+          <div>
+            <label>Files Uploaded (count)</label>
+            <input type="number" id="fFileCount" min="0" value="0" placeholder="0" />
+          </div>
+          <div>
+            <label>Total File Size (KB)</label>
+            <input type="number" id="fFileSize" min="0" value="0" placeholder="e.g. 420" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label>Pixel Response Words</label>
+            <input type="number" id="fRespWords" min="0" value="0" placeholder="e.g. 3000" />
+            <div class="wc-helper">total word count across all responses</div>
+          </div>
+          <div>
+            <label>Your Word Count</label>
+            <input type="number" id="fMsgCount" min="0" value="0" placeholder="e.g. 800" />
+            <div class="wc-helper">paste your msgs into notepad, grab count</div>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="field-group">
+          <label>Tools Used This Session</label>
+          <div class="tool-grid" id="toolGrid">
+            <label class="tool-check" id="tc-pks"><input type="checkbox" value="PKS" onchange="updateToolCheck(this)"> Project KS</label>
+            <label class="tool-check" id="tc-web"><input type="checkbox" value="WebSearch" onchange="updateToolCheck(this)"> Web Search</label>
+            <label class="tool-check" id="tc-fetch"><input type="checkbox" value="WebFetch" onchange="updateToolCheck(this)"> Web Fetch</label>
+            <label class="tool-check" id="tc-chrome"><input type="checkbox" value="Chrome" onchange="updateToolCheck(this)"> Chrome Tools</label>
+            <label class="tool-check" id="tc-mcp"><input type="checkbox" value="MCP" onchange="updateToolCheck(this)"> MCP / Gmail</label>
+            <label class="tool-check" id="tc-image"><input type="checkbox" value="Image" onchange="updateToolCheck(this)"> Image Search</label>
+            <label class="tool-check" id="tc-artifact"><input type="checkbox" value="Artifact" onchange="updateToolCheck(this)"> Artifacts</label>
+            <label class="tool-check" id="tc-memory"><input type="checkbox" value="Memory" onchange="updateToolCheck(this)"> Memory Edits</label>
+            <label class="tool-check" id="tc-conv"><input type="checkbox" value="ConvSearch" onchange="updateToolCheck(this)"> Conv. Search</label>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <div class="field-group">
+          <label>Notes</label>
+          <textarea id="fNotes" placeholder="What got built, what hit limits, what drifted..."></textarea>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="logSession()">▶ LOG SESSION</button>
+          <button class="btn btn-secondary" onclick="clearForm()">CLEAR</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ESTIMATE PANEL -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber);"></div>
+        <div class="panel-title" style="color:var(--amber);">Live Estimate</div>
+      </div>
+      <div class="panel-body">
+
+        <p style="font-size:0.7rem;color:var(--text-dim);margin-bottom:1rem;line-height:1.5;">
+          Rough estimates based on known Claude usage factors. Not exact — Claude doesn't expose actual token counts. Good enough to spot patterns. Fill in the form to see numbers update.
+        </p>
+
+        <div class="estimate-panel">
+          <div class="estimate-grid">
+            <div class="est-item">
+              <div class="est-label">Duration</div>
+              <div class="est-value" id="estDuration">—</div>
+            </div>
+            <div class="est-item">
+              <div class="est-label">Est. Context Tokens</div>
+              <div class="est-value" id="estContextTokens">—</div>
+            </div>
+            <div class="est-item">
+              <div class="est-label">Est. Response Tokens</div>
+              <div class="est-value" id="estRespTokens">—</div>
+            </div>
+            <div class="est-item">
+              <div class="est-label">File Overhead (tokens)</div>
+              <div class="est-value" id="estFileTokens">—</div>
+            </div>
+            <div class="est-item">
+              <div class="est-label">Tool Overhead (tokens)</div>
+              <div class="est-value" id="estToolTokens">—</div>
+            </div>
+            <div class="est-item">
+              <div class="est-label">Est. Total Tokens</div>
+              <div class="est-value" id="estTotal">—</div>
+            </div>
+          </div>
+
+          <div class="pressure-bar-wrap">
+            <div class="pressure-label">
+              <span>Session Pressure</span>
+              <span id="pressurePct">0%</span>
+            </div>
+            <div class="pressure-bar">
+              <div class="pressure-fill" id="pressureFill" style="width:0%;background:var(--green);"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sep"></div>
+
+        <div style="font-size:0.65rem;color:var(--text-dim);line-height:1.8;">
+          <div style="margin-bottom:0.5rem;color:var(--text-muted);letter-spacing:0.15em;text-transform:uppercase;font-size:0.6rem;">Estimation Model</div>
+          <div>📐 Words → Tokens: ~<span style="color:var(--teal);">0.75 tokens/word</span></div>
+          <div>📁 File tokens: ~<span style="color:var(--teal);">1 token per KB</span> (rough)</div>
+          <div>🔧 Tool calls: ~<span style="color:var(--teal);">200–500 tokens</span> each</div>
+          <div>🔁 Context overhead: older msgs cost more as session grows</div>
+          <div>📦 PKS cache: nearly free after first load</div>
+          <div style="margin-top:0.5rem;color:var(--text-muted);">Pressure = est. tokens vs ~50k session soft limit</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Log Table -->
+  <div class="log-wrap">
+    <div class="log-header-row">
+      <div style="display:flex;align-items:center;gap:0.6rem;">
+        <div class="panel-dot" style="background:var(--orange);box-shadow:0 0 6px var(--orange);animation-delay:1s;"></div>
+        <div class="panel-title" style="color:var(--orange);">Session Archive</div>
+      </div>
+      <div style="font-size:0.65rem;color:var(--text-muted);" id="logCount">0 entries</div>
+    </div>
+
+    <div class="log-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Label</th>
+            <th>Duration</th>
+            <th>Your Words</th>
+            <th>Pixel Words</th>
+            <th>Files</th>
+            <th>Tools</th>
+            <th>Est. Tokens</th>
+            <th>Pressure</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="logBody">
+        </tbody>
+      </table>
+      <div class="empty-state" id="emptyState">
+        <span>// NO DATA</span>
+        LOG YOUR FIRST SESSION ABOVE TO START THE ARCHIVE
+      </div>
+    </div>
+
+    <div class="export-bar">
+      <span id="exportStats">No sessions logged yet.</span>
+      <button class="btn btn-secondary" style="flex:0;padding:0.4rem 0.8rem;" onclick="exportCSV()">EXPORT CSV</button>
+      <button class="btn btn-danger" style="flex:0;padding:0.4rem 0.8rem;" onclick="clearAll()">CLEAR ALL</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ---- Storage ----
+  const STORE_KEY = 'reef_session_log';
+
+  function loadSessions() {
+    try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+    catch { return []; }
+  }
+
+  function saveSessions(sessions) {
+    localStorage.setItem(STORE_KEY, JSON.stringify(sessions));
+  }
+
+  // ---- Clock ----
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('liveClock').textContent = now.toLocaleTimeString();
+    document.getElementById('liveDate').textContent = now.toLocaleDateString('en-US', { weekday:'short', year:'numeric', month:'short', day:'numeric' });
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // ---- Tool check styling ----
+  function updateToolCheck(cb) {
+    cb.parentElement.classList.toggle('checked', cb.checked);
+    liveEstimate();
+  }
+
+  // ---- Live estimate ----
+  function liveEstimate() {
+    const start = document.getElementById('fStart').value;
+    const end = document.getElementById('fEnd').value;
+    const fileSize = parseFloat(document.getElementById('fFileSize').value) || 0;
+    const respWords = parseFloat(document.getElementById('fRespWords').value) || 0;
+    const msgCount = parseFloat(document.getElementById('fMsgCount').value) || 0;
+    const tools = getCheckedTools();
+
+    // Duration
+    let durMin = null;
+    let durStr = '—';
+    if (start && end) {
+      const ms = new Date(end) - new Date(start);
+      if (ms > 0) {
+        durMin = ms / 60000;
+        const h = Math.floor(durMin / 60);
+        const m = Math.floor(durMin % 60);
+        durStr = h > 0 ? `${h}h ${m}m` : `${m}m`;
+      }
+    }
+
+    // Token estimates
+    // Response tokens: ~0.75 tokens per word
+    const respTokens = Math.round(respWords * 0.75);
+
+    // Context overhead: your messages + context growth (longer sessions = heavier context)
+    // assume avg msg ~50 words, plus context overhead multiplier based on duration
+    const userMsgTokens = msgCount * 40;
+    const contextMultiplier = durMin ? Math.min(1 + (durMin / 60) * 0.3, 2.5) : 1;
+    const contextTokens = Math.round((respTokens * 0.5 + userMsgTokens) * contextMultiplier);
+
+    // File tokens: ~1 token per KB (rough)
+    const fileTokens = Math.round(fileSize * 1.0);
+
+    // Tool overhead: each tool type adds overhead
+    const toolTokens = tools.length * 300;
+
+    const totalTokens = respTokens + contextTokens + fileTokens + toolTokens;
+
+    // Pressure: 50k soft limit estimate
+    const SESSION_LIMIT = 50000;
+    const pressure = Math.min((totalTokens / SESSION_LIMIT) * 100, 100);
+
+    // Update UI
+    document.getElementById('estDuration').textContent = durStr;
+    document.getElementById('estContextTokens').textContent = contextTokens > 0 ? fmtNum(contextTokens) : '—';
+    document.getElementById('estRespTokens').textContent = respTokens > 0 ? fmtNum(respTokens) : '—';
+    document.getElementById('estFileTokens').textContent = fileTokens > 0 ? fmtNum(fileTokens) : '0';
+    document.getElementById('estToolTokens').textContent = toolTokens > 0 ? fmtNum(toolTokens) : '0';
+
+    const totalEl = document.getElementById('estTotal');
+    totalEl.textContent = totalTokens > 0 ? fmtNum(totalTokens) : '—';
+    totalEl.className = 'est-value' + (pressure >= 80 ? ' danger' : pressure >= 50 ? ' warn' : '');
+
+    const fill = document.getElementById('pressureFill');
+    fill.style.width = pressure + '%';
+    fill.style.background = pressure >= 80 ? 'var(--red)' : pressure >= 50 ? 'var(--amber)' : 'var(--green)';
+    fill.style.boxShadow = `0 0 8px ${pressure >= 80 ? 'var(--red)' : pressure >= 50 ? 'var(--amber)' : 'var(--green)'}`;
+    document.getElementById('pressurePct').textContent = Math.round(pressure) + '%';
+
+    return { durStr, durMin, contextTokens, respTokens, fileTokens, toolTokens, totalTokens, pressure };
+  }
+
+  function getCheckedTools() {
+    return [...document.querySelectorAll('#toolGrid input[type="checkbox"]:checked')].map(cb => cb.value);
+  }
+
+  // ---- Live update on input ----
+  ['fStart','fEnd','fFileSize','fRespWords','fMsgCount','fFileCount'].forEach(id => {
+    document.getElementById(id).addEventListener('input', liveEstimate);
+  });
+
+  // ---- Log session ----
+  function logSession() {
+    const label = document.getElementById('fLabel').value.trim() || '(unlabeled)';
+    const start = document.getElementById('fStart').value;
+    const end = document.getElementById('fEnd').value;
+    const fileCount = parseInt(document.getElementById('fFileCount').value) || 0;
+    const fileSize = parseFloat(document.getElementById('fFileSize').value) || 0;
+    const respWords = parseInt(document.getElementById('fRespWords').value) || 0;
+    const msgCount = parseInt(document.getElementById('fMsgCount').value) || 0;
+    const tools = getCheckedTools();
+    const notes = document.getElementById('fNotes').value.trim();
+
+    if (!start) { toast('⚠ Set a start time first.'); return; }
+
+    const est = liveEstimate();
+
+    const session = {
+      id: Date.now(),
+      label, start, end,
+      fileCount, fileSize,
+      respWords, msgCount,
+      tools, notes,
+      durStr: est.durStr,
+      durMin: est.durMin,
+      totalTokens: est.totalTokens,
+      pressure: est.pressure,
+    };
+
+    const sessions = loadSessions();
+    sessions.unshift(session);
+    saveSessions(sessions);
+    renderLog();
+    clearForm();
+    toast('▶ Session logged to the Reef.');
+  }
+
+  // ---- Render log ----
+  function renderLog() {
+    const sessions = loadSessions();
+    const body = document.getElementById('logBody');
+    const empty = document.getElementById('emptyState');
+
+    empty.style.display = sessions.length === 0 ? 'block' : 'none';
+
+    body.innerHTML = sessions.map(s => {
+      const date = s.start ? new Date(s.start).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+      const badgeClass = s.pressure >= 80 ? 'badge-crit' : s.pressure >= 50 ? 'badge-high' : s.pressure >= 25 ? 'badge-med' : 'badge-low';
+      const badgeLabel = s.pressure >= 80 ? 'CRITICAL' : s.pressure >= 50 ? 'HIGH' : s.pressure >= 25 ? 'MEDIUM' : 'LOW';
+      const toolStr = s.tools && s.tools.length ? s.tools.join(', ') : '—';
+      return `<tr>
+        <td class="td-date">${date}</td>
+        <td>${escHtml(s.label)}</td>
+        <td class="td-duration">${s.durStr || '—'}</td>
+        <td>${s.msgCount || 0}</td>
+        <td class="td-words">${fmtNum(s.respWords || 0)}</td>
+        <td class="td-files">${s.fileCount || 0} / ${s.fileSize || 0}KB</td>
+        <td class="td-tools">${escHtml(toolStr)}</td>
+        <td class="td-tokens">${fmtNum(s.totalTokens || 0)}</td>
+        <td class="td-pressure"><span class="pressure-badge ${badgeClass}">${badgeLabel}</span></td>
+        <td class="td-del" onclick="deleteSession(${s.id})">✕</td>
+      </tr>`;
+    }).join('');
+
+    // Update summary stats
+    document.getElementById('logCount').textContent = sessions.length + ' ' + (sessions.length === 1 ? 'entry' : 'entries');
+    document.getElementById('statSessions').textContent = sessions.length;
+
+    const totalMin = sessions.reduce((a,s) => a + (s.durMin || 0), 0);
+    document.getElementById('statHours').textContent = (totalMin / 60).toFixed(1);
+
+    const totalTok = sessions.reduce((a,s) => a + (s.totalTokens || 0), 0);
+    document.getElementById('statTokens').textContent = totalTok >= 1000 ? (totalTok/1000).toFixed(1)+'k' : totalTok;
+
+    const avgPressure = sessions.length ? sessions.reduce((a,s) => a + (s.pressure || 0), 0) / sessions.length : null;
+    const avgEl = document.getElementById('statPressure');
+    if (avgPressure === null) { avgEl.textContent = '—'; }
+    else {
+      avgEl.textContent = Math.round(avgPressure) + '%';
+      avgEl.style.color = avgPressure >= 80 ? 'var(--red)' : avgPressure >= 50 ? 'var(--amber)' : 'var(--green)';
+    }
+
+    // Export stats
+    document.getElementById('exportStats').textContent = sessions.length > 0
+      ? `${sessions.length} sessions · ${(totalMin/60).toFixed(1)}h total · ~${fmtNum(totalTok)} est. tokens`
+      : 'No sessions logged yet.';
+  }
+
+  // ---- Delete ----
+  function deleteSession(id) {
+    const sessions = loadSessions().filter(s => s.id !== id);
+    saveSessions(sessions);
+    renderLog();
+    toast('Entry removed from archive.');
+  }
+
+  // ---- Clear form ----
+  function clearForm() {
+    ['fLabel','fNotes'].forEach(id => document.getElementById(id).value = '');
+    ['fStart','fEnd'].forEach(id => document.getElementById(id).value = '');
+    ['fFileCount','fFileSize','fRespWords','fMsgCount'].forEach(id => document.getElementById(id).value = '0');
+    document.querySelectorAll('#toolGrid input[type="checkbox"]').forEach(cb => {
+      cb.checked = false;
+      cb.parentElement.classList.remove('checked');
+    });
+    liveEstimate();
+  }
+
+  // ---- Clear all ----
+  function clearAll() {
+    if (!confirm('Clear the entire session archive? This cannot be undone.')) return;
+    saveSessions([]);
+    renderLog();
+    toast('Archive cleared.');
+  }
+
+  // ---- Export CSV ----
+  function exportCSV() {
+    const sessions = loadSessions();
+    if (!sessions.length) { toast('No sessions to export.'); return; }
+    const headers = ['Date','Label','Start','End','Duration','Messages','Resp Words','Files Count','File Size KB','Tools','Est Tokens','Pressure %','Notes'];
+    const rows = sessions.map(s => [
+      s.start ? new Date(s.start).toLocaleDateString() : '',
+      `"${(s.label||'').replace(/"/g,'""')}"`,
+      s.start || '',
+      s.end || '',
+      s.durStr || '',
+      s.msgCount || 0,
+      s.respWords || 0,
+      s.fileCount || 0,
+      s.fileSize || 0,
+      `"${(s.tools||[]).join(', ')}"`,
+      s.totalTokens || 0,
+      Math.round(s.pressure || 0),
+      `"${(s.notes||'').replace(/"/g,'""')}"`
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(blob);
+    a.download = `reef_sessions_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    toast('CSV exported.');
+  }
+
+  // ---- Helpers ----
+  function fmtNum(n) {
+    if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n/1000).toFixed(1) + 'k';
+    return n.toString();
+  }
+
+  function escHtml(s) {
+    return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  let toastTimer;
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+  }
+
+  // ---- Init ----
+  renderLog();
+  liveEstimate();
+</script>
+</body>
+</html>
